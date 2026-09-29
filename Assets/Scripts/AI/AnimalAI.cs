@@ -21,14 +21,25 @@ public class AnimalAI : MonoBehaviour
     [SerializeField] private Transform areaCenter;
     [SerializeField] private float areaRadius = 30f;
 
+    // --- ANIMATION REFERENCE ---
+    private Animator anim;
+
     private Vector3 target;
     private bool isIdleCoroutineRunning = false;
-
     private float scaleMultiplier = 1f;
+    private Coroutine idleCoroutine;
 
     void Start()
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
+        
+        // Strict parent object Animator collection
+        anim = GetComponent<Animator>(); 
+
+        if (anim == null)
+        {
+            Debug.LogWarning($"[AI WARNING] No Animator component found on the parent object ({gameObject.name})!");
+        }
 
         scaleMultiplier = Mathf.Max(transform.localScale.x, transform.localScale.y, transform.localScale.z);
         if (scaleMultiplier <= 0) scaleMultiplier = 1f; 
@@ -50,53 +61,87 @@ public class AnimalAI : MonoBehaviour
             transform.position = closestHit.position;
         }
 
-        currentState = NPCState.Patrol;
-        PickNewPatrolPoint();
+        ChangeState(NPCState.Patrol);
     }
 
     void Update()
     {
-        if (currentState == NPCState.Dead || areaCenter == null) return;
+        if (currentState == NPCState.Dead) return;
+        if (areaCenter == null || navMeshAgent == null) return;
 
+        // Dynamic directional look tracking to drive "Idle Left" vs "Idle Right" loops
+        HandleDirectionalTracking();
+
+        // Check if out of bounds
         if (Vector3.Distance(transform.position, areaCenter.position) > (areaRadius * scaleMultiplier))
         {
-            isIdleCoroutineRunning = false;
-            StopAllCoroutines();
-
             navMeshAgent.isStopped = false;
             navMeshAgent.SetDestination(areaCenter.position);
-            currentState = NPCState.Patrol;
+            ChangeState(NPCState.Patrol);
             return;
         }
 
         float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
+        // State Machine evaluation
         if (distanceToPlayer <= (detectionRange * scaleMultiplier))
         {
-            if (currentState != NPCState.Runaway)
-            {
-                isIdleCoroutineRunning = false;
-                StopAllCoroutines();
-                currentState = NPCState.Runaway;
-            }
+            ChangeState(NPCState.Runaway);
         }
         else if (currentState == NPCState.Runaway && distanceToPlayer > ((detectionRange + 5f) * scaleMultiplier))
         {
-            currentState = NPCState.Idle;
+            ChangeState(NPCState.Idle);
         }
 
-        StateHandler();
+        ExecuteCurrentState();
     }
 
-    public void StateHandler()
+    private void ChangeState(NPCState newState)
+    {
+        // Matches the Enemy AI state protection logic to halt multiple triggers
+        if (currentState == newState && newState != NPCState.Patrol) return;
+
+        if (currentState == NPCState.Idle && newState != NPCState.Idle)
+        {
+            if (idleCoroutine != null)
+            {
+                StopCoroutine(idleCoroutine);
+            }
+            isIdleCoroutineRunning = false;
+        }
+
+        currentState = newState;
+        UpdateAnimatorState();
+
+        switch (currentState)
+        {
+            case NPCState.Idle:
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
+                break;
+
+            case NPCState.Patrol:
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = false;
+                PickNewPatrolPoint();
+                break;
+
+            case NPCState.Runaway:
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = false;
+                break;
+
+            case NPCState.Dead:
+                if (navMeshAgent != null) navMeshAgent.enabled = false;
+                break;
+        }
+    }
+
+    private void ExecuteCurrentState()
     {
         switch (currentState)
         {
             case NPCState.Idle:
-                navMeshAgent.isStopped = true;
                 if (!isIdleCoroutineRunning)
                 {
-                    StartCoroutine(IdleFor(2f));
+                    idleCoroutine = StartCoroutine(IdleFor(2f));
                 }
                 break;
 
@@ -105,44 +150,64 @@ public class AnimalAI : MonoBehaviour
                 break;
 
             case NPCState.Runaway:
-                if (playerTransform == null) return;
+                if (playerTransform == null || !navMeshAgent.enabled) return;
 
-                navMeshAgent.isStopped = false;
                 Vector3 directionToTarget = transform.position - playerTransform.position;
-
                 Vector3 targetPosition = transform.position + directionToTarget.normalized * (runawayRange * scaleMultiplier);
 
                 navMeshAgent.SetDestination(targetPosition);
                 break;
-
-            case NPCState.Dead:
-                navMeshAgent.isStopped = true;
-                break;
         }
     }
 
-    
+    private void UpdateAnimatorState()
+    {
+        if (anim != null)
+        {
+            // Pushes integer state parameters to Animator (0=Idle, 1=Patrol, 2=Runaway, 3=Dead)
+            anim.SetInteger("AnimState", (int)currentState);
+        }
+    }
+
+    private void HandleDirectionalTracking()
+    {
+        if (anim == null || navMeshAgent == null) return;
+
+        // Tracks movement velocity along the X-axis to keep your directional states informed
+        if (navMeshAgent.velocity.magnitude > 0.1f)
+        {
+            if (navMeshAgent.velocity.x < -0.1f)
+            {
+                anim.SetBool("FacingLeft", true);
+            }
+            else if (navMeshAgent.velocity.x > 0.1f)
+            {
+                anim.SetBool("FacingLeft", false);
+            }
+        }
+    }
 
     public void PatrolRoutine()
     {
-        navMeshAgent.isStopped = false;
-
-        float arrivalThreshold = (navMeshAgent.stoppingDistance + 0.1f) * scaleMultiplier;
-
-        if (!navMeshAgent.pathPending && navMeshAgent.remainingDistance <= arrivalThreshold)
+        if (navMeshAgent.enabled && !navMeshAgent.pathPending)
         {
-            currentState = NPCState.Idle;
+            float arrivalThreshold = (navMeshAgent.stoppingDistance + 0.1f) * scaleMultiplier;
+            if (navMeshAgent.remainingDistance <= arrivalThreshold || !navMeshAgent.hasPath)
+            {
+                ChangeState(NPCState.Idle);
+            }
         }
     }
 
     public void PickNewPatrolPoint()
     {
+        if (!navMeshAgent.enabled) return;
+
         float calculatedRange = patrolRange * scaleMultiplier;
         Vector3 randomDirection = Random.insideUnitSphere * calculatedRange;
         randomDirection += areaCenter.position;
 
         NavMeshHit hit;
-
         if (NavMesh.SamplePosition(randomDirection, out hit, calculatedRange * 2f, NavMesh.AllAreas))
         {
             target = hit.position;
@@ -154,21 +219,13 @@ public class AnimalAI : MonoBehaviour
     {
         isIdleCoroutineRunning = true;
         yield return new WaitForSeconds(time);
-
-        PickNewPatrolPoint();
-
-        currentState = NPCState.Patrol;
         isIdleCoroutineRunning = false;
+        
+        ChangeState(NPCState.Patrol);
     }
 
-    private void OnDrawGizmosSelected()
+    public void SetDeadState()
     {
-        if (areaCenter != null)
-        {
-            float currentGizmoScale = Application.isPlaying ? scaleMultiplier : Mathf.Max(transform.localScale.x, transform.localScale.y, transform.localScale.z);
-
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(areaCenter.position, areaRadius * currentGizmoScale);
-        }
+        ChangeState(NPCState.Dead);
     }
 }

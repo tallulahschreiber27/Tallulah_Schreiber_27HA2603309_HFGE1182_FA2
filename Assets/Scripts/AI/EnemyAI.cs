@@ -9,120 +9,200 @@ public class EnemyAI : MonoBehaviour
 {
     public enum EnemyState { Idle, Patrol, Chase, Attack, Dead }
     [SerializeField] private EnemyState currentState = EnemyState.Idle;
-    
+
     [Header("AI PARAMETERS")]
     [SerializeField] private NavMeshAgent navMeshAgent;
-    [SerializeField] private float detectionRange = 10f;
-    [SerializeField] private float attackRange = 1f;
+    [SerializeField] private float detectionRange = 12f;
+    [SerializeField] private float attackRange = 2.5f; // Increased to let the AI stop slightly before bumping
     [SerializeField] private float patrolRange = 4f;
-    [SerializeField] private float knockbackForce = 5f;
+    [SerializeField] private float knockbackForce = 6f;
     private Rigidbody rb;
 
-    [Header("ATTACK PARAMETERS")] 
+    [Header("ATTACK PARAMETERS")]
     [SerializeField] private Transform playerTransform;
-    [SerializeField] private float damage;
+    [SerializeField] private float damage = 10f;
+    [SerializeField] private float attackRate = 1.2f;
+    private float nextAttackTime = 0f;
 
-    [Header("AREA RESTRICTION")] 
+    [Header("AREA RESTRICTION")]
     [SerializeField] private Transform areaCenter;
-    [SerializeField] private float areaRadius = 12f;
-    
-    private Vector3 target;
-    
-    
+    [SerializeField] private float areaRadius = 15f;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    private Vector3 target;
+    private Animator anim;
+
+    private bool isIdleTiming = false;
+    private Coroutine idleCoroutine;
+    private bool isKnockbackActive = false;
+
     void Start()
     {
-        navMeshAgent =  GetComponent<NavMeshAgent>();
+        navMeshAgent = GetComponent<NavMeshAgent>();
+        anim = GetComponent<Animator>();
         rb = GetComponent<Rigidbody>();
-        PickNewPatrolPoint();
+
+        if (navMeshAgent != null)
+        {
+            navMeshAgent.isStopped = false;
+        }
+
+        ChangeState(EnemyState.Idle);
     }
 
-    // Update is called once per frame
     void Update()
     {
-        if (currentState == EnemyState.Dead)
+        if (currentState == EnemyState.Dead) return;
+        if (navMeshAgent == null) return;
+
+        if (playerTransform == null)
         {
+            if (currentState != EnemyState.Patrol && currentState != EnemyState.Idle)
+            {
+                ChangeState(EnemyState.Patrol);
+            }
+            if (!isKnockbackActive) ExecuteCurrentState();
             return;
         }
-        
-        if (navMeshAgent.enabled == false)
+
+        if (isKnockbackActive) return;
+
+        // Check if out of bounds
+        if (areaCenter != null && Vector3.Distance(transform.position, areaCenter.position) > areaRadius)
         {
+            navMeshAgent.isStopped = false;
+            navMeshAgent.SetDestination(areaCenter.position);
+            ChangeState(EnemyState.Chase);
             return;
         }
-        
+
         float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
-        if (Vector3.Distance(transform.position, areaCenter.position) > areaRadius)
-        {
-            navMeshAgent.SetDestination(areaCenter.position);
-            
-            return;
-        }
-
+        // Core State Machine decisions based on distance
         if (distanceToPlayer <= attackRange)
         {
-            currentState = EnemyState.Attack;
+            ChangeState(EnemyState.Attack);
         }
         else if (distanceToPlayer <= detectionRange)
         {
-            currentState = EnemyState.Chase;
+            ChangeState(EnemyState.Chase);
         }
-        
-        StateHandler();
+        else
+        {
+            if (currentState == EnemyState.Chase || currentState == EnemyState.Attack)
+            {
+                ChangeState(EnemyState.Patrol);
+            }
+        }
+
+        ExecuteCurrentState();
     }
 
-    public void StateHandler()
+    private void ChangeState(EnemyState newState)
     {
-      
+        if (currentState == newState && newState != EnemyState.Patrol && newState != EnemyState.Attack) return;
+
+        if (currentState == EnemyState.Idle && newState != EnemyState.Idle)
+        {
+            if (idleCoroutine != null)
+            {
+                StopCoroutine(idleCoroutine);
+            }
+            isIdleTiming = false;
+        }
+
+        currentState = newState;
+        UpdateAnimatorState();
+
         switch (currentState)
         {
             case EnemyState.Idle:
-                navMeshAgent.isStopped = false;
-                StartCoroutine(IdleFor(1f));
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
                 break;
+
             case EnemyState.Patrol:
-                PatrolRoutine();
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = false;
+                PickNewPatrolPoint();
                 break;
+
             case EnemyState.Chase:
-                navMeshAgent.isStopped = false;
-                navMeshAgent.SetDestination(playerTransform.position);
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = false;
                 break;
+
             case EnemyState.Attack:
-                navMeshAgent.isStopped = true;
-                transform.LookAt(playerTransform.position);
-                AttackRoutine();
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
                 break;
+
             case EnemyState.Dead:
+                TriggerDeath();
                 break;
         }
     }
-    
-    //PATROL
+
+    public void ExecuteCurrentState()
+    {
+        switch (currentState)
+        {
+            case EnemyState.Idle:
+                if (!isIdleTiming)
+                {
+                    idleCoroutine = StartCoroutine(IdleFor(2f));
+                }
+                break;
+
+            case EnemyState.Patrol:
+                PatrolRoutine();
+                break;
+
+            case EnemyState.Chase:
+                if (playerTransform != null && navMeshAgent.enabled)
+                {
+                    navMeshAgent.SetDestination(playerTransform.position);
+                }
+                break;
+
+            case EnemyState.Attack:
+                if (playerTransform != null)
+                {
+                    // Ensure the horizontal angle is completely flat
+                    Vector3 lookPos = new Vector3(playerTransform.position.x, transform.position.y, playerTransform.position.z);
+                    transform.LookAt(lookPos);
+
+                    // If we are close enough, trigger the combat loop
+                    if (Time.time >= nextAttackTime)
+                    {
+                        StartCoroutine(KnockbackCombatSequence());
+                        nextAttackTime = Time.time + attackRate;
+                    }
+                }
+                break;
+        }
+    }
+
+    private void UpdateAnimatorState()
+    {
+        if (anim != null)
+        {
+            anim.SetInteger("AnimState", (int)currentState);
+        }
+    }
 
     public void PatrolRoutine()
     {
-
-        if (navMeshAgent.enabled == false)
+        if (navMeshAgent.enabled && !navMeshAgent.pathPending && (navMeshAgent.remainingDistance < 0.8f || !navMeshAgent.hasPath))
         {
-            return;
-        }
-        
-        navMeshAgent.isStopped = false;
-
-        if (!navMeshAgent.pathPending && navMeshAgent.remainingDistance < .5f)
-        {
-            PickNewPatrolPoint();
+            ChangeState(EnemyState.Idle);
         }
     }
 
     public void PickNewPatrolPoint()
     {
-        Vector3 randomDirection = Random.insideUnitSphere * patrolRange;
-        randomDirection += areaCenter.position;
-        
-        NavMeshHit hit;
+        if (!navMeshAgent.enabled) return;
 
+        Vector3 origin = areaCenter != null ? areaCenter.position : transform.position;
+        Vector3 randomDirection = Random.insideUnitSphere * patrolRange;
+        randomDirection += origin;
+
+        NavMeshHit hit;
         if (NavMesh.SamplePosition(randomDirection, out hit, patrolRange, NavMesh.AllAreas))
         {
             target = hit.position;
@@ -132,49 +212,86 @@ public class EnemyAI : MonoBehaviour
 
     public IEnumerator IdleFor(float time)
     {
+        isIdleTiming = true;
         yield return new WaitForSeconds(time);
-        currentState = EnemyState.Patrol;
+        isIdleTiming = false;
+        ChangeState(EnemyState.Patrol);
     }
-    
-    //ATTACK
 
-    public void AttackRoutine()
+    // FIX: Combined Sequence that forces animation, damage, and physics knockback simultaneously!
+    public IEnumerator KnockbackCombatSequence()
     {
-        if (navMeshAgent.enabled == false)
+        isKnockbackActive = true;
+
+        // 1. Play the attack animation instantly when the hit lands
+        if (anim != null)
         {
-            return;
+            anim.ResetTrigger("AttackTrigger");
+            anim.SetTrigger("AttackTrigger");
         }
-        
-        navMeshAgent.SetDestination(playerTransform.position);
-    }
 
-    public IEnumerator Knockback()
-    {
+        // 2. Deal the damage right now
+        ApplyDamageToPlayer();
+
+        // 3. Initiate the physics flight backward
         navMeshAgent.enabled = false;
         rb.isKinematic = false;
         rb.useGravity = true;
-        
-        Vector3 forceDirection = (transform.position - target).normalized;
-        forceDirection.y = 0.5f; 
 
-        
+        Vector3 sourcePos = playerTransform != null ? playerTransform.position : target;
+        Vector3 forceDirection = (transform.position - sourcePos).normalized;
+        forceDirection.y = 0.4f; // Clean upward arc
+
         rb.linearVelocity = Vector3.zero;
         rb.AddForce(forceDirection * knockbackForce, ForceMode.Impulse);
-        yield return new WaitForSeconds(1f);
-        
-        navMeshAgent.enabled = true;
+
+        yield return new WaitForSeconds(0.5f); // Duration of the physical flying recoil
+
         rb.isKinematic = true;
         rb.useGravity = false;
-        navMeshAgent.isStopped = false;
+        navMeshAgent.enabled = true;
+        isKnockbackActive = false;
+
+        ChangeState(EnemyState.Patrol);
+    }
+
+    private void ApplyDamageToPlayer()
+    {
+        if (playerTransform != null)
+        {
+            HealthHandler playerHealth = playerTransform.GetComponent<HealthHandler>();
+            if (playerHealth != null)
+            {
+                Debug.Log($"[EnemyAI] Impact! Dealing {damage} damage to Player.");
+                playerHealth.DamageHandler("Enemy", damage);
+            }
+        }
+    }
+
+    public void TriggerDeath()
+    {
+        isKnockbackActive = false;
+        StopAllCoroutines();
+        if (navMeshAgent != null) navMeshAgent.enabled = false;
+        if (rb != null) rb.isKinematic = true;
+        Debug.Log($"[EnemyAI] {gameObject.name} has died.");
+    }
+
+    public void Die()
+    {
+        ChangeState(EnemyState.Dead);
     }
 
     private void OnCollisionEnter(Collision col)
     {
-        if (col.gameObject.CompareTag("Player"))
+        // Physical fallback touch if needed
+        if (col.gameObject.CompareTag("Player") && currentState != EnemyState.Dead && !isKnockbackActive)
         {
-            //navMeshAgent.isStopped = true;
-            StartCoroutine(Knockback());
-            col.gameObject.GetComponent<HealthHandler>().DamageHandler("Enemy", damage);
+            if (Time.time >= nextAttackTime)
+            {
+                StartCoroutine(KnockbackCombatSequence());
+                nextAttackTime = Time.time + attackRate;
+            }
         }
     }
 }
