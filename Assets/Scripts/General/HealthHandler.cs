@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.UI; 
+using UnityEngine.UI;
 
 public class HealthHandler : MonoBehaviour
 {
@@ -50,7 +50,7 @@ public class HealthHandler : MonoBehaviour
             if (parentCanvas != null)
             {
                 canvasTransform = parentCanvas.transform;
-                canvasTransform.SetParent(null); 
+                canvasTransform.SetParent(null);
             }
         }
 
@@ -94,7 +94,7 @@ public class HealthHandler : MonoBehaviour
     {
         if (healthSlider != null)
         {
-            
+
             healthSlider.value = Mathf.Clamp01(health / healthMax);
         }
     }
@@ -103,7 +103,7 @@ public class HealthHandler : MonoBehaviour
     {
         if (isDead) return;
 
-        
+
         if (damageTag == "Arrow" || damageTag == "Enemy" || (damageTags != null && damageTags.Contains(damageTag)))
         {
             ApplyDamage(damageAmount);
@@ -163,7 +163,11 @@ public class HealthHandler : MonoBehaviour
 
         Debug.Log($"[{gameObject.name}] has died.");
 
-        
+        // >>> ADD THIS LINK: Tells your AnimalAI script to execute its animation sequence
+        AnimalAI aiScript = GetComponent<AnimalAI>();
+        if (aiScript != null) aiScript.Die();
+        // <<< END LINK
+
         if (canvasTransform != null)
         {
             Destroy(canvasTransform.gameObject);

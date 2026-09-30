@@ -68930,6 +68930,18 @@ PrefabInstance:
       propertyPath: m_Name
       value: NPC
       objectReference: {fileID: 0}
+    - target: {fileID: 1877038589198387595, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.98
+      objectReference: {fileID: 0}
+    - target: {fileID: 1877038589198387595, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.08
+      objectReference: {fileID: 0}
+    - target: {fileID: 1877038589198387595, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 3.26
+      objectReference: {fileID: 0}
     - target: {fileID: 3563432182155744727, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
       propertyPath: m_LocalPosition.x
       value: 280.7
@@ -68969,6 +68981,14 @@ PrefabInstance:
     - target: {fileID: 3563432182155744727, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7463390755651840733, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
+      propertyPath: destroyOnDeath
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7463390755651840733, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
+      propertyPath: destroyOnDeathDelay
+      value: 3
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 443871241224882602, guid: 28c11cd0f71213f40aef62aceb1a8910, type: 3}
@@ -69096,6 +69116,10 @@ PrefabInstance:
       propertyPath: m_Mesh
       value: 
       objectReference: {fileID: 2038306124}
+    - target: {fileID: 2729918469888011152, guid: de4773209c49fae40a4e13e322989e6a, type: 3}
+      propertyPath: m_Convex
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3542316991831902464, guid: de4773209c49fae40a4e13e322989e6a, type: 3}
       propertyPath: m_Mesh
       value: 
@@ -69195,6 +69219,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6929619929208667335, guid: 736589a0f0a8bf54e99e50a4cc490695, type: 3}
       propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7144981051808893950, guid: 736589a0f0a8bf54e99e50a4cc490695, type: 3}
+      propertyPath: m_Interpolate
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 7144981051808893950, guid: 736589a0f0a8bf54e99e50a4cc490695, type: 3}

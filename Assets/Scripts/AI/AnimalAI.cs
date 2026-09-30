@@ -10,7 +10,7 @@ public class AnimalAI : MonoBehaviour
 
     [Header("AI PARAMETERS")]
     [SerializeField] private NavMeshAgent navMeshAgent;
-    [SerializeField] private float patrolRange = 10f;
+    [SerializeField] private float patrolRange = 4f;
 
     [Header("DETECTION PARAMETERS")]
     [SerializeField] private float detectionRange = 10f;
@@ -21,194 +21,129 @@ public class AnimalAI : MonoBehaviour
     [SerializeField] private Transform areaCenter;
     [SerializeField] private float areaRadius = 30f;
 
-    // --- ANIMATION REFERENCE ---
-    private Animator anim;
-
     private Vector3 target;
-    private bool isIdleCoroutineRunning = false;
-    private float scaleMultiplier = 1f;
-    private Coroutine idleCoroutine;
+    private Animator anim;
+    private HealthHandler healthScript; // Reference to your existing health script
 
+    // Smooth animation tracking variables
+    private float lastRotationY;
+    private NPCState previousState;
+
+    // Start is called before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
-        
-        // Strict parent object Animator collection
-        anim = GetComponent<Animator>(); 
+        anim = GetComponent<Animator>();
+        healthScript = GetComponent<HealthHandler>(); // Automatically finds your health script
 
-        if (anim == null)
-        {
-            Debug.LogWarning($"[AI WARNING] No Animator component found on the parent object ({gameObject.name})!");
-        }
+        if (navMeshAgent == null) Debug.LogError($"<b>[{gameObject.name}]</b> NavMeshAgent component is missing!");
+        if (anim == null) Debug.LogWarning($"<b>[{gameObject.name}]</b> Animator component is missing!");
+        if (playerTransform == null) Debug.LogError($"<b>[{gameObject.name}]</b> Player Transform is not assigned in the Inspector!");
+        if (areaCenter == null) Debug.LogError($"<b>[{gameObject.name}]</b> Area Center Transform is not assigned in the Inspector!");
+        if (healthScript == null) Debug.LogWarning($"<b>[{gameObject.name}]</b> Existing HealthHandler script was not found on this object!");
 
-        scaleMultiplier = Mathf.Max(transform.localScale.x, transform.localScale.y, transform.localScale.z);
-        if (scaleMultiplier <= 0) scaleMultiplier = 1f; 
+        lastRotationY = transform.eulerAngles.y;
+        previousState = currentState;
 
-        if (areaCenter == null)
-        {
-            Debug.LogError($"[AI ERROR] Please assign an 'Area Center' GameObject to {gameObject.name} in the inspector!");
-        }
-
-        if (playerTransform == null)
-        {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null) playerTransform = player.transform;
-        }
-
-        NavMeshHit closestHit;
-        if (NavMesh.SamplePosition(transform.position, out closestHit, 5f * scaleMultiplier, NavMesh.AllAreas))
-        {
-            transform.position = closestHit.position;
-        }
-
-        ChangeState(NPCState.Patrol);
+        PickNewPatrolPoint();
     }
 
+    #region BostonCity Campus
+    /* This code is property of Boston City Campus, and should not be used, or copied for any other subject.
+     If you would copy and or use this in an assessment outside the assessment that this was supplied for
+     action will be taken against you for plagiarism.
+    */
+    #endregion
+
+    // Update is called once per frame
     void Update()
     {
-        if (currentState == NPCState.Dead) return;
-        if (areaCenter == null || navMeshAgent == null) return;
-
-        // Dynamic directional look tracking to drive "Idle Left" vs "Idle Right" loops
-        HandleDirectionalTracking();
-
-        // Check if out of bounds
-        if (Vector3.Distance(transform.position, areaCenter.position) > (areaRadius * scaleMultiplier))
+        if (currentState == NPCState.Dead)
         {
-            navMeshAgent.isStopped = false;
-            navMeshAgent.SetDestination(areaCenter.position);
-            ChangeState(NPCState.Patrol);
             return;
+        }
+
+        // Log state changes dynamically
+        if (currentState != previousState)
+        {
+            Debug.Log($"<b>[{gameObject.name}]</b> State changed from <color=orange>{previousState}</color> to <color=cyan>{currentState}</color>");
+            previousState = currentState;
         }
 
         float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
-        // State Machine evaluation
-        if (distanceToPlayer <= (detectionRange * scaleMultiplier))
+        // Check if out of bounds
+        if (Vector3.Distance(transform.position, areaCenter.position) > areaRadius)
         {
-            ChangeState(NPCState.Runaway);
-        }
-        else if (currentState == NPCState.Runaway && distanceToPlayer > ((detectionRange + 5f) * scaleMultiplier))
-        {
-            ChangeState(NPCState.Idle);
+            navMeshAgent.SetDestination(areaCenter.position);
+            UpdateAnimatorParameters();
+            return;
         }
 
-        ExecuteCurrentState();
+        // Check player detection
+        if (distanceToPlayer <= detectionRange && currentState != NPCState.Runaway)
+        {
+            currentState = NPCState.Runaway;
+        }
+
+        StateHandler();
+        UpdateAnimatorParameters();
     }
 
-    private void ChangeState(NPCState newState)
-    {
-        // Matches the Enemy AI state protection logic to halt multiple triggers
-        if (currentState == newState && newState != NPCState.Patrol) return;
-
-        if (currentState == NPCState.Idle && newState != NPCState.Idle)
-        {
-            if (idleCoroutine != null)
-            {
-                StopCoroutine(idleCoroutine);
-            }
-            isIdleCoroutineRunning = false;
-        }
-
-        currentState = newState;
-        UpdateAnimatorState();
-
-        switch (currentState)
-        {
-            case NPCState.Idle:
-                if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
-                break;
-
-            case NPCState.Patrol:
-                if (navMeshAgent.enabled) navMeshAgent.isStopped = false;
-                PickNewPatrolPoint();
-                break;
-
-            case NPCState.Runaway:
-                if (navMeshAgent.enabled) navMeshAgent.isStopped = false;
-                break;
-
-            case NPCState.Dead:
-                if (navMeshAgent != null) navMeshAgent.enabled = false;
-                break;
-        }
-    }
-
-    private void ExecuteCurrentState()
+    public void StateHandler()
     {
         switch (currentState)
         {
             case NPCState.Idle:
-                if (!isIdleCoroutineRunning)
-                {
-                    idleCoroutine = StartCoroutine(IdleFor(2f));
-                }
+                navMeshAgent.isStopped = true;
+                navMeshAgent.velocity = Vector3.zero; // Stop coasting momentum so he can play idle animations
+                StartCoroutine(IdleFor(3f));
                 break;
-
             case NPCState.Patrol:
+                navMeshAgent.isStopped = false;
                 PatrolRoutine();
                 break;
-
             case NPCState.Runaway:
-                if (playerTransform == null || !navMeshAgent.enabled) return;
+                navMeshAgent.isStopped = false;
 
                 Vector3 directionToTarget = transform.position - playerTransform.position;
-                Vector3 targetPosition = transform.position + directionToTarget.normalized * (runawayRange * scaleMultiplier);
+                Vector3 targetPosition = transform.position + directionToTarget.normalized * runawayRange;
 
-                navMeshAgent.SetDestination(targetPosition);
+                NavMeshHit runawayHit;
+                if (NavMesh.SamplePosition(targetPosition, out runawayHit, 5f, NavMesh.AllAreas))
+                {
+                    navMeshAgent.SetDestination(runawayHit.position);
+                }
+                else
+                {
+                    PickNewPatrolPoint();
+                    currentState = NPCState.Patrol;
+                }
+                break;
+            case NPCState.Dead:
                 break;
         }
     }
 
-    private void UpdateAnimatorState()
-    {
-        if (anim != null)
-        {
-            // Pushes integer state parameters to Animator (0=Idle, 1=Patrol, 2=Runaway, 3=Dead)
-            anim.SetInteger("AnimState", (int)currentState);
-        }
-    }
-
-    private void HandleDirectionalTracking()
-    {
-        if (anim == null || navMeshAgent == null) return;
-
-        // Tracks movement velocity along the X-axis to keep your directional states informed
-        if (navMeshAgent.velocity.magnitude > 0.1f)
-        {
-            if (navMeshAgent.velocity.x < -0.1f)
-            {
-                anim.SetBool("FacingLeft", true);
-            }
-            else if (navMeshAgent.velocity.x > 0.1f)
-            {
-                anim.SetBool("FacingLeft", false);
-            }
-        }
-    }
-
+    // PATROL
     public void PatrolRoutine()
     {
-        if (navMeshAgent.enabled && !navMeshAgent.pathPending)
+        bool arrived = !navMeshAgent.pathPending && navMeshAgent.remainingDistance < 0.1f;
+        bool physicallyStuck = !navMeshAgent.pathPending && navMeshAgent.velocity.sqrMagnitude < 0.01f && navMeshAgent.remainingDistance > 0.5f;
+
+        if (arrived || physicallyStuck)
         {
-            float arrivalThreshold = (navMeshAgent.stoppingDistance + 0.1f) * scaleMultiplier;
-            if (navMeshAgent.remainingDistance <= arrivalThreshold || !navMeshAgent.hasPath)
-            {
-                ChangeState(NPCState.Idle);
-            }
+            currentState = NPCState.Idle;
         }
     }
 
     public void PickNewPatrolPoint()
     {
-        if (!navMeshAgent.enabled) return;
-
-        float calculatedRange = patrolRange * scaleMultiplier;
-        Vector3 randomDirection = Random.insideUnitSphere * calculatedRange;
+        Vector3 randomDirection = Random.insideUnitSphere * patrolRange;
         randomDirection += areaCenter.position;
 
         NavMeshHit hit;
-        if (NavMesh.SamplePosition(randomDirection, out hit, calculatedRange * 2f, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(randomDirection, out hit, patrolRange, NavMesh.AllAreas))
         {
             target = hit.position;
             navMeshAgent.SetDestination(target);
@@ -217,15 +152,59 @@ public class AnimalAI : MonoBehaviour
 
     public IEnumerator IdleFor(float time)
     {
-        isIdleCoroutineRunning = true;
-        yield return new WaitForSeconds(time);
-        isIdleCoroutineRunning = false;
-        
-        ChangeState(NPCState.Patrol);
+        float elapsed = 0f;
+        while (elapsed < time)
+        {
+            if (currentState == NPCState.Runaway || currentState == NPCState.Dead)
+            {
+                yield break;
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (currentState == NPCState.Idle)
+        {
+            PickNewPatrolPoint();
+            currentState = NPCState.Patrol;
+        }
     }
 
-    public void SetDeadState()
+    private void UpdateAnimatorParameters()
     {
-        ChangeState(NPCState.Dead);
+        if (anim == null) return;
+
+        float currentSpeed = navMeshAgent.velocity.magnitude;
+        anim.SetFloat("Speed", currentSpeed);
+
+        float currentRotationY = transform.eulerAngles.y;
+        float deltaRotationY = Mathf.DeltaAngle(lastRotationY, currentRotationY);
+        lastRotationY = currentRotationY;
+
+        float turnValue = Mathf.Clamp(deltaRotationY / (Time.deltaTime * 100f), -1f, 1f);
+        anim.SetFloat("Turn", turnValue);
+    }
+
+    /// <summary>
+    /// This function shuts down the AI and triggers the animator clip immediately.
+    /// </summary>
+    public void Die()
+    {
+        if (currentState == NPCState.Dead) return;
+
+        Debug.Log($"<b>[{gameObject.name}]</b> AI received lethal call. Playing death animation.");
+        currentState = NPCState.Dead;
+
+        if (navMeshAgent != null)
+        {
+            navMeshAgent.isStopped = true;
+            navMeshAgent.velocity = Vector3.zero;
+            navMeshAgent.enabled = false; // Prevents the AI engine from sliding the corpse
+        }
+
+        if (anim != null)
+        {
+            anim.SetTrigger("Die");
+        }
     }
 }
