@@ -7,6 +7,10 @@ public class PlayerController : MonoBehaviour
 {
     private PlayerInputActions InputAction;
 
+    [Header("ANIMATION PARAMETERS")]
+    private Animator anim;
+    private ShootHandler shootHandler; // Cached link to your existing ShootHandler component
+
     [Header("MOVEMENT PARAMETERS")]
     public float walkSpeed;
     public float sprintSpeed;
@@ -39,6 +43,9 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        anim = GetComponent<Animator>();
+        shootHandler = GetComponent<ShootHandler>(); // Automatically pair with your weapon script
+
         InputAction = new PlayerInputActions();
     }
 
@@ -77,6 +84,11 @@ public class PlayerController : MonoBehaviour
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+
+        if (shootHandler == null)
+        {
+            Debug.LogError($"<b>[{gameObject.name}]</b> PlayerController failed to find the ShootHandler script on this GameObject!");
+        }
     }
 
     void Update()
@@ -88,12 +100,53 @@ public class PlayerController : MonoBehaviour
             Debug.Log("[MANUAL INPUT] Physical 'E' key pressed down!");
             ExecuteManualInteraction();
         }
+
+        UpdateAnimatorParameters();
     }
 
     private void FixedUpdate()
     {
         GroundDetection();
         MoveHandler();
+    }
+
+    /// <summary>
+    /// Reads coordinates and handles stance booleans, keeping your 2D Locomotion Blend tree synced.
+    /// </summary>
+    private void UpdateAnimatorParameters()
+    {
+        if (anim == null) return;
+
+        // 1. Send movement magnitude values to drive walking/running loops
+        float flatSpeed = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude;
+        anim.SetFloat("Speed", flatSpeed);
+
+        // 2. Drive the 2D Blend tree stance slider (0f = standing, 1f = crouching)
+        float crouchWeight = isCrouching ? 1f : 0f;
+        anim.SetFloat("isCrouching", crouchWeight);
+
+        // 3. Environment trackers
+        anim.SetBool("isGrounded", isGrounded);
+        anim.SetFloat("VerticalVelocity", rb.linearVelocity.y);
+
+        // 4. --- UPDATED AMMO LINK SYNC (FLOAT VERSION) ---
+        // Reads from your exact ShootHandler script data to determine if a bow stance is allowed!
+        if (shootHandler != null)
+        {
+            // If arrows > 0, weight is 1.0f (Alert Bow Idle). If 0, weight is 0.0f (Lowered Civilian Idle).
+            float ammoWeight = (shootHandler.GetCurrentAmmoCount() > 0) ? 1f : 0f;
+            anim.SetFloat("hasAmmo", ammoWeight);
+        }
+    }
+
+
+    // Call this function when picking up quiver items to route data safely to your core inventory handler
+    public void AddAmmunition(int amount)
+    {
+        if (shootHandler != null)
+        {
+            shootHandler.AddAmmo(amount);
+        }
     }
 
     private void ExecuteManualInteraction()
@@ -165,6 +218,7 @@ public class PlayerController : MonoBehaviour
         if (isGrounded)
         {
             rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpForce, rb.linearVelocity.z);
+            if (anim != null) anim.SetTrigger("JumpTrigger");
         }
     }
 

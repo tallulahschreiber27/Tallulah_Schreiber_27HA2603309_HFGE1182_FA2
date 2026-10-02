@@ -38,7 +38,8 @@ public class ShootHandler : MonoBehaviour
     private bool isZooming;
 
     private bool isPunching = false;
-    private Coroutine punchCoroutine; 
+    private Coroutine punchCoroutine;
+    private Animator playerAnim; // Cached reference to the player's core Animator component
 
     private void Awake()
     {
@@ -50,6 +51,13 @@ public class ShootHandler : MonoBehaviour
 
     private void Start()
     {
+        // Automatically link up with the Animator component on this GameObject
+        playerAnim = GetComponent<Animator>();
+        if (playerAnim == null)
+        {
+            Debug.LogWarning($"<b>[{gameObject.name}]</b> ShootHandler could not find an Animator component on this GameObject!");
+        }
+
         if (punchHitBox != null) punchHitBox.SetActive(false);
         CheckWeaponAndUIState();
     }
@@ -61,10 +69,16 @@ public class ShootHandler : MonoBehaviour
             if (currentAmmo > 0)
             {
                 OnBeginShootManual();
+
+                // >>> ANIMATION LINK: Tell the animator to pull the bow back!
+                if (playerAnim != null) playerAnim.SetTrigger("ShootTrigger");
             }
             else
             {
                 punchCoroutine = StartCoroutine(PunchObject());
+
+                // >>> ANIMATION LINK: Tell the animator to throw a punch!
+                if (playerAnim != null) playerAnim.SetTrigger("PunchTrigger");
             }
         }
 
@@ -274,5 +288,13 @@ public class ShootHandler : MonoBehaviour
 
             Gizmos.matrix = originalMatrix;
         }
+    }
+
+    /// <summary>
+    /// Public helper function that allows external scripts to safely check the loaded arrow count.
+    /// </summary>
+    public int GetCurrentAmmoCount()
+    {
+        return currentAmmo;
     }
 }
