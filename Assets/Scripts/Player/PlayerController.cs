@@ -9,7 +9,7 @@ public class PlayerController : MonoBehaviour
 
     [Header("ANIMATION PARAMETERS")]
     private Animator anim;
-    private ShootHandler shootHandler; // Cached link to your existing ShootHandler component
+    private ShootHandler shootHandler; 
 
     [Header("MOVEMENT PARAMETERS")]
     public float walkSpeed;
@@ -40,11 +40,18 @@ public class PlayerController : MonoBehaviour
 
     private Pickup currentPickupInRange = null;
 
+    #region BostonCity Campus
+    /* This code is property of Boston City Campus, and should not be used, or copied for any other subject.
+     If you would copy and or use this in an assessment outside the assessment that this was supplied for
+     action will be taken against you for plagiarism.
+    */
+    #endregion
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         anim = GetComponent<Animator>();
-        shootHandler = GetComponent<ShootHandler>(); // Automatically pair with your weapon script
+        shootHandler = GetComponent<ShootHandler>(); 
 
         InputAction = new PlayerInputActions();
     }
@@ -117,30 +124,23 @@ public class PlayerController : MonoBehaviour
     {
         if (anim == null) return;
 
-        // 1. Send movement magnitude values to drive walking/running loops
         float flatSpeed = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude;
         anim.SetFloat("Speed", flatSpeed);
 
-        // 2. Drive the 2D Blend tree stance slider (0f = standing, 1f = crouching)
         float crouchWeight = isCrouching ? 1f : 0f;
         anim.SetFloat("isCrouching", crouchWeight);
 
-        // 3. Environment trackers
         anim.SetBool("isGrounded", isGrounded);
         anim.SetFloat("VerticalVelocity", rb.linearVelocity.y);
 
-        // 4. --- UPDATED AMMO LINK SYNC (FLOAT VERSION) ---
-        // Reads from your exact ShootHandler script data to determine if a bow stance is allowed!
         if (shootHandler != null)
         {
-            // If arrows > 0, weight is 1.0f (Alert Bow Idle). If 0, weight is 0.0f (Lowered Civilian Idle).
             float ammoWeight = (shootHandler.GetCurrentAmmoCount() > 0) ? 1f : 0f;
             anim.SetFloat("hasAmmo", ammoWeight);
         }
     }
 
 
-    // Call this function when picking up quiver items to route data safely to your core inventory handler
     public void AddAmmunition(int amount)
     {
         if (shootHandler != null)

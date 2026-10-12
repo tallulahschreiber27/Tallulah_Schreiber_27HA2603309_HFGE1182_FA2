@@ -39,8 +39,14 @@ public class ShootHandler : MonoBehaviour
 
     private bool isPunching = false;
     private Coroutine punchCoroutine;
-    private Animator playerAnim; // Cached reference to the player's core Animator component
+    private Animator playerAnim;
 
+    #region BostonCity Campus
+    /* This code is property of Boston City Campus, and should not be used, or copied for any other subject.
+     If you would copy and or use this in an assessment outside the assessment that this was supplied for
+     action will be taken against you for plagiarism.
+    */
+    #endregion
     private void Awake()
     {
         if (cam == null)
@@ -51,7 +57,6 @@ public class ShootHandler : MonoBehaviour
 
     private void Start()
     {
-        // Automatically link up with the Animator component on this GameObject
         playerAnim = GetComponent<Animator>();
         if (playerAnim == null)
         {
@@ -70,14 +75,14 @@ public class ShootHandler : MonoBehaviour
             {
                 OnBeginShootManual();
 
-                // >>> ANIMATION LINK: Tell the animator to pull the bow back!
+                //Tells animator to pull bow back
                 if (playerAnim != null) playerAnim.SetTrigger("ShootTrigger");
             }
             else
             {
                 punchCoroutine = StartCoroutine(PunchObject());
 
-                // >>> ANIMATION LINK: Tell the animator to throw a punch!
+                //Tells animator to punch
                 if (playerAnim != null) playerAnim.SetTrigger("PunchTrigger");
             }
         }

@@ -35,6 +35,12 @@ public class HealthHandler : MonoBehaviour
 
     private bool isDead = false;
 
+    #region BostonCity Campus
+    /* This code is property of Boston City Campus, and should not be used, or copied for any other subject.
+     If you would copy and or use this in an assessment outside the assessment that this was supplied for
+     action will be taken against you for plagiarism.
+    */
+    #endregion
     void Start()
     {
         health = healthMax;
@@ -163,10 +169,10 @@ public class HealthHandler : MonoBehaviour
 
         Debug.Log($"[{gameObject.name}] has died.");
 
-        // >>> ADD THIS LINK: Tells your AnimalAI script to execute its animation sequence
+        
         AnimalAI aiScript = GetComponent<AnimalAI>();
         if (aiScript != null) aiScript.Die();
-        // <<< END LINK
+        
 
         if (canvasTransform != null)
         {

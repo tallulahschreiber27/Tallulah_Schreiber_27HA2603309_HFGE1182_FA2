@@ -35,6 +35,12 @@ public class EnemyAI : MonoBehaviour
     private Coroutine idleCoroutine;
     private bool isKnockbackActive = false;
 
+    #region BostonCity Campus
+    /* This code is property of Boston City Campus, and should not be used, or copied for any other subject.
+     If you would copy and or use this in an assessment outside the assessment that this was supplied for
+     action will be taken against you for plagiarism.
+    */
+    #endregion
     void Start()
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
@@ -58,7 +64,6 @@ public class EnemyAI : MonoBehaviour
         if (currentState == EnemyState.Dead) return;
         if (navMeshAgent == null) return;
 
-        // 1. Check if the player link is actually assigned in the inspector
         if (playerTransform == null)
         {
             Debug.LogError($"<b>[{gameObject.name}]</b> <color=red>ATTACK CANCELLED:</color> 'Player Transform' slot is completely empty in the Inspector!");
@@ -73,14 +78,11 @@ public class EnemyAI : MonoBehaviour
 
         if (isKnockbackActive) return;
 
-        // 2. Measure distance and calculate the dynamic grace threshold range
         float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
         float currentAttackRange = (currentState == EnemyState.Attack) ? (attackRange + 0.5f) : attackRange;
 
-        // 3. Print out the exact real-time distance metrics in the console window
         Debug.Log($"<b>[{gameObject.name}]</b> Distance to Player: <color=yellow>{distanceToPlayer:F2}m</color> | Current Strike Threshold: <color=cyan>{currentAttackRange:F2}m</color> (State: {currentState})");
 
-        // 4. State Decision Matrix
         if (distanceToPlayer <= currentAttackRange)
         {
             Debug.Log($"<b>[{gameObject.name}]</b> <color=green>SUCCESS:</color> Player is inside range! Forcing state to Attack.");
@@ -111,7 +113,6 @@ public class EnemyAI : MonoBehaviour
 
     private void ChangeState(EnemyState newState)
     {
-        // Allowed sequential updates to Chase, Patrol, and Attack to ensure velocity variables adapt dynamically
         if (currentState == newState && newState != EnemyState.Patrol && newState != EnemyState.Attack && newState != EnemyState.Chase) return;
 
         if (currentState == EnemyState.Idle && newState != EnemyState.Idle)
@@ -131,7 +132,7 @@ public class EnemyAI : MonoBehaviour
                 if (navMeshAgent.enabled)
                 {
                     navMeshAgent.isStopped = true;
-                    navMeshAgent.velocity = Vector3.zero; // Halts momentum instantly so idle animations kick in
+                    navMeshAgent.velocity = Vector3.zero; 
                 }
                 break;
 
@@ -139,7 +140,7 @@ public class EnemyAI : MonoBehaviour
                 if (navMeshAgent.enabled)
                 {
                     navMeshAgent.isStopped = false;
-                    navMeshAgent.speed = 2f; // Force casual walking speed
+                    navMeshAgent.speed = 2f; 
                 }
                 PickNewPatrolPoint();
                 break;
@@ -148,7 +149,7 @@ public class EnemyAI : MonoBehaviour
                 if (navMeshAgent.enabled)
                 {
                     navMeshAgent.isStopped = false;
-                    navMeshAgent.speed = 5f; // Force frantic chasing sprint speed
+                    navMeshAgent.speed = 5f; 
                 }
                 break;
 
@@ -191,11 +192,9 @@ public class EnemyAI : MonoBehaviour
             case EnemyState.Attack:
                 if (playerTransform != null)
                 {
-                    // Ensure the horizontal angle is completely flat to prevent flipping over
                     Vector3 lookPos = new Vector3(playerTransform.position.x, transform.position.y, playerTransform.position.z);
                     transform.LookAt(lookPos);
 
-                    // Combat cadence processing
                     if (Time.time >= nextAttackTime)
                     {
                         StartCoroutine(KnockbackCombatSequence());
@@ -213,7 +212,6 @@ public class EnemyAI : MonoBehaviour
     {
         if (anim == null) return;
 
-        // If active, pull real velocity, otherwise clamp to zero
         float currentSpeed = (navMeshAgent != null && navMeshAgent.enabled) ? navMeshAgent.velocity.magnitude : 0f;
 
         anim.SetFloat("Speed", currentSpeed);
@@ -263,38 +261,36 @@ public class EnemyAI : MonoBehaviour
 
         ApplyDamageToPlayer();
 
-        // 1. Turn off AI pathfinding, turn on active physics engine
         navMeshAgent.enabled = false;
         rb.isKinematic = false;
         rb.useGravity = true;
 
         Vector3 sourcePos = playerTransform != null ? playerTransform.position : target;
         Vector3 forceDirection = (transform.position - sourcePos).normalized;
-        forceDirection.y = 0.2f; // Lowered from 0.4f to prevent jumping too high into the air
+        forceDirection.y = 0.2f; 
 
         rb.linearVelocity = Vector3.zero;
         rb.AddForce(forceDirection * knockbackForce, ForceMode.Impulse);
 
-        // 2. Wait a split second for the physical velocity impact impulse to finish
+        
         yield return new WaitForSeconds(0.4f);
 
-        // 3. --- PERMANENT FLOATING FIX: SPREAD NAVMESH RAYCAST GROUND CHECK ---
-        // Look directly beneath the bear's current spatial coordinates to locate the blue baked floor
+        
         NavMeshHit groundHit;
         if (NavMesh.SamplePosition(transform.position, out groundHit, 5f, NavMesh.AllAreas))
         {
-            // Smoothly snap the bear's absolute Y height back to the exact surface level of the floor
+            
             transform.position = groundHit.position;
         }
         else if (areaCenter != null)
         {
-            // Emergency Backup: If he somehow flew off-mesh completely, snap his feet to the home zone height
+            
             Vector3 emergencyPos = transform.position;
             emergencyPos.y = areaCenter.position.y;
             transform.position = emergencyPos;
         }
 
-        // 4. Cleanly restore rigid body state settings back to standard tracking movement modes
+        
         rb.linearVelocity = Vector3.zero;
         rb.isKinematic = true;
         rb.useGravity = false;

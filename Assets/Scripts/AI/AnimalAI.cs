@@ -23,9 +23,9 @@ public class AnimalAI : MonoBehaviour
 
     private Vector3 target;
     private Animator anim;
-    private HealthHandler healthScript; // Reference to your existing health script
+    private HealthHandler healthScript;
 
-    // Smooth animation tracking variables
+    
     private float lastRotationY;
     private NPCState previousState;
 
@@ -34,7 +34,7 @@ public class AnimalAI : MonoBehaviour
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
         anim = GetComponent<Animator>();
-        healthScript = GetComponent<HealthHandler>(); // Automatically finds your health script
+        healthScript = GetComponent<HealthHandler>(); 
 
         if (navMeshAgent == null) Debug.LogError($"<b>[{gameObject.name}]</b> NavMeshAgent component is missing!");
         if (anim == null) Debug.LogWarning($"<b>[{gameObject.name}]</b> Animator component is missing!");
@@ -96,7 +96,7 @@ public class AnimalAI : MonoBehaviour
         {
             case NPCState.Idle:
                 navMeshAgent.isStopped = true;
-                navMeshAgent.velocity = Vector3.zero; // Stop coasting momentum so he can play idle animations
+                navMeshAgent.velocity = Vector3.zero; 
                 StartCoroutine(IdleFor(3f));
                 break;
             case NPCState.Patrol:
